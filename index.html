@@ -93,7 +93,7 @@ input:focus-visible, textarea:focus-visible { outline: 0; }
 .item.done .check span { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .del { flex: none; width: 40px; height: 44px; display: grid; place-items: center; color: var(--muted); visibility: hidden; }
 .item:focus-within .del { visibility: visible; }
-.item.dragging { position: relative; z-index: 2; background: var(--surface); border-radius: 10px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.14); }
+.item.dragging { position: relative; z-index: 2; will-change: transform; background: var(--surface); border-radius: 10px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.14); }
 .item.done { padding-left: 28px; }
 .txt { flex: 1; padding: 11px 0; color: var(--muted); word-break: break-word; }
 .tx {
@@ -577,16 +577,20 @@ function clearChecked(box, n) {
 
 function attachDrag(handle, row, n) {
   handle.addEventListener('pointerdown', e => {
+    if (e.button > 0) return;
     e.preventDefault();
     const list = row.parentElement;
     if (!list) return;
     document.activeElement?.blur();
-    handle.setPointerCapture(e.pointerId);
+    const id = e.pointerId;
+    const grab = e.clientY - row.getBoundingClientRect().top;
+    let y = e.clientY, ended = false, raf = 0;
     row.classList.add('dragging');
     navigator.vibrate?.(10);
-    let ended = false;
-    const move = ev => {
-      const y = ev.clientY;
+
+    // Put the row where the finger is and make it follow the finger.
+    const place = () => {
+      row.style.transform = '';
       let before = null;
       for (const s of list.children) {
         if (s === row) continue;
@@ -594,24 +598,40 @@ function attachDrag(handle, row, n) {
         if (y < r.top + r.height / 2) { before = s; break; }
       }
       if (row.nextElementSibling !== before) list.insertBefore(row, before);
-      if (y < 90) scrollBy(0, -10);
-      else if (y > innerHeight - 90) scrollBy(0, 10);
+      const top = row.getBoundingClientRect().top;
+      row.style.transform = `translateY(${y - grab - top}px)`;
     };
-    const end = () => {
-      if (ended) return;
+    // Keep scrolling while the finger rests near the top or bottom edge.
+    const tick = () => {
+      const edge = 90;
+      const speed = y < edge ? -(edge - y) / 6 : y > innerHeight - edge ? (y - innerHeight + edge) / 6 : 0;
+      if (speed) { scrollBy(0, speed); place(); }
+      raf = requestAnimationFrame(tick);
+    };
+    const move = ev => {
+      if (ev.pointerId !== id) return;
+      ev.preventDefault();
+      y = ev.clientY;
+      place();
+    };
+    const end = ev => {
+      if (ended || (ev && ev.pointerId !== id)) return;
       ended = true;
-      handle.removeEventListener('pointermove', move);
-      handle.removeEventListener('pointerup', end);
-      handle.removeEventListener('pointercancel', end);
+      cancelAnimationFrame(raf);
+      removeEventListener('pointermove', move);
+      removeEventListener('pointerup', end);
+      removeEventListener('pointercancel', end);
       row.classList.remove('dragging');
+      row.style.transform = '';
       const byId = new Map(n.items.map(i => [i.id, i]));
       const open = [...list.children].map(c => byId.get(c.dataset.id)).filter(Boolean);
       n.items = [...open, ...n.items.filter(i => i.done)];
       touch(n);
     };
-    handle.addEventListener('pointermove', move);
-    handle.addEventListener('pointerup', end);
-    handle.addEventListener('pointercancel', end);
+    addEventListener('pointermove', move, { passive: false });
+    addEventListener('pointerup', end);
+    addEventListener('pointercancel', end);
+    raf = requestAnimationFrame(tick);
   });
 }
 
