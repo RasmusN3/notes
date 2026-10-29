@@ -48,16 +48,11 @@ input:focus-visible, textarea:focus-visible { outline: 0; }
 
 /* Home */
 .notes { list-style: none; }
-.note-row { display: block; width: 100%; text-align: left; padding: 14px 0; border-bottom: 1px solid var(--line); }
-.note-row .t, .note-row .s { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.note-row .t { font-weight: 600; }
-.note-row .s { margin-top: 2px; font-size: 15px; color: var(--muted); }
+.notes li { display: flex; align-items: center; background: var(--bg); border-bottom: 1px solid var(--line); margin-left: -8px; }
+.notes .handle { width: 36px; height: 52px; }
+.note-row { flex: 1; min-width: 0; text-align: left; padding: 15px 0; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.notes li.dragging { position: relative; z-index: 2; will-change: transform; background: var(--surface); border-radius: 10px; border-bottom-color: transparent; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.14); }
 .empty { padding: 64px 0; text-align: center; color: var(--muted); }
-.banner {
-  display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 15px; color: var(--muted);
-}
-.banner button { color: var(--accent); font-weight: 600; padding: 6px 0; }
 .fab {
   position: fixed; z-index: 6; width: 60px; height: 60px; border-radius: 20px;
   right: calc(20px + env(safe-area-inset-right, 0px)); bottom: calc(24px + env(safe-area-inset-bottom, 0px));
@@ -130,7 +125,7 @@ input:focus-visible, textarea:focus-visible { outline: 0; }
 <body>
 <div id="app"></div>
 <div id="toast" role="status" aria-live="polite"></div>
-<input type="file" id="importFile" accept=".json,application/json" hidden>
+<input type="file" id="importFile" accept=".json,.txt,application/json,text/plain" hidden>
 <script>
 'use strict';
 
@@ -166,10 +161,6 @@ function el(tag, attrs = {}, ...kids) {
 }
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
 const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
-function ago(t) {
-  const d = Math.floor((Date.now() - t) / DAY);
-  return d <= 0 ? 'today' : d === 1 ? 'yesterday' : `${d} days ago`;
-}
 
 /* ---------- storage (IndexedDB) ---------- */
 let db;
@@ -269,36 +260,37 @@ function goHome() {
 }
 
 /* ---------- home ---------- */
-function summary(n) {
-  if (n.type === 'list') {
-    const filled = n.items.filter(i => i.text.trim());
-    const open = filled.filter(i => !i.done);
-    if (!filled.length) return 'Empty list';
-    if (!open.length) return 'All checked';
-    return `${open.length} left: ` + open.map(i => i.text.trim()).join(', ');
-  }
-  return n.body.trim().split('\n')[0] || 'Empty note';
+function sortedNotes() {
+  return [...notes.values()].filter(n => !isEmpty(n)).sort((a, b) => a.order - b.order);
 }
-
-function backupReminder(sorted) {
-  if (!sorted.length) return null;
-  const lb = meta.lastBackup;
-  if (lb && (sorted[0].updated <= lb || Date.now() - lb < 7 * DAY)) return null;
-  if (!lb && Date.now() - Math.min(...sorted.map(n => n.created)) < DAY) return null;
-  return el('div', { class: 'banner' },
-    el('span', {}, lb ? `Last backup ${ago(lb)}.` : 'No backup yet.'),
-    el('button', { onclick: exportBackup }, 'Back up'));
+function topOrder() {
+  let min = 0;
+  for (const n of notes.values()) if (Number.isFinite(n.order) && n.order < min) min = n.order;
+  return min - 1;
+}
+// Save without changing the note's "last edited" time.
+function persistOrder(list) {
+  list.forEach((n, i) => { n.order = i; pending.add(n.id); });
+  flush();
 }
 
 function renderHome() {
   document.title = 'Notes';
-  const sorted = [...notes.values()].filter(n => !isEmpty(n)).sort((a, b) => b.updated - a.updated);
-  const wrap = el('main', { class: 'wrap' }, backupReminder(sorted));
+  const sorted = sortedNotes();
+  const wrap = el('main', { class: 'wrap' });
   if (!sorted.length) wrap.append(el('p', { class: 'empty' }, 'No notes yet. Tap + to make a list.'));
-  else wrap.append(el('ul', { class: 'notes' }, sorted.map(n =>
-    el('li', {}, el('button', { class: 'note-row', onclick: () => openNote(n.id) },
-      el('span', { class: 't' }, n.title.trim() || 'Untitled'),
-      el('span', { class: 's' }, summary(n)))))));
+  else {
+    const ul = el('ul', { class: 'notes' });
+    for (const n of sorted) {
+      const handle = el('span', { class: 'handle', 'aria-hidden': 'true', html: ICON.grip });
+      const li = el('li', {}, handle,
+        el('button', { class: 'note-row', onclick: () => openNote(n.id) }, n.title.trim() || 'Untitled'));
+      li.dataset.id = n.id;
+      attachDrag(handle, li, list => persistOrder([...list.children].map(c => notes.get(c.dataset.id)).filter(Boolean)));
+      ul.append(li);
+    }
+    wrap.append(ul);
+  }
   $app.replaceChildren(
     el('header', { class: 'bar' },
       el('h1', {}, 'Notes'),
@@ -310,7 +302,7 @@ function renderHome() {
 function createNote(type) {
   closeSheet();
   const now = Date.now();
-  const n = { id: uid(), type, title: '', items: [], body: '', created: now, updated: now };
+  const n = { id: uid(), type, title: '', items: [], body: '', order: topOrder(), created: now, updated: now };
   notes.set(n.id, n); // saved once something is typed
   openNote(n.id);
 }
@@ -328,11 +320,10 @@ async function openHomeMenu() {
   const items = [
     el('button', { onclick: () => { closeSheet(); exportBackup(); } }, 'Back up notes'),
   ];
-  if (navigator.canShare) items.push(el('button', { onclick: () => { closeSheet(); shareBackup(); } }, 'Send backup to Drive or another app'));
+  if (navigator.canShare) items.push(el('button', { onclick: () => { shareBackup(); closeSheet(); } }, 'Share backup to Drive or another app'));
   items.push(
     el('button', { onclick: () => { closeSheet(); $file.click(); } }, 'Restore from backup'),
     el('hr'),
-    el('p', { class: 'info' }, meta.lastBackup ? `Last backup: ${new Date(meta.lastBackup).toLocaleDateString()}` : 'No backup yet'),
     el('p', { class: 'info' }, persisted
       ? `${plural(notes.size, 'note')} stored on this phone. Storage is protected from automatic cleanup.`
       : `${plural(notes.size, 'note')} stored on this phone. Install the app to protect storage from automatic cleanup.`)
@@ -341,39 +332,33 @@ async function openHomeMenu() {
 }
 
 /* ---------- backup ---------- */
-async function backupFile() {
-  await flush();
-  const data = {
+// Built synchronously so the share sheet opens within the tap.
+function backupData() {
+  return JSON.stringify({
     app: 'notes', version: 1, exported: new Date().toISOString(),
-    notes: [...notes.values()].filter(n => !isEmpty(n))
-  };
-  const name = `notes-backup-${new Date().toISOString().slice(0, 10)}.json`;
-  return new File([JSON.stringify(data, null, 1)], name, { type: 'application/json' });
+    notes: sortedNotes()
+  }, null, 1);
 }
-function markBackedUp() {
-  meta.lastBackup = Date.now();
-  setMeta('lastBackup', meta.lastBackup);
-  if (!currentId()) renderHome();
-}
-async function exportBackup() {
-  const file = await backupFile();
+const backupName = ext => `notes-backup-${new Date().toISOString().slice(0, 10)}.${ext}`;
+
+function exportBackup() {
+  flush();
+  const file = new File([backupData()], backupName('json'), { type: 'application/json' });
   const url = URL.createObjectURL(file);
   const a = el('a', { href: url, download: file.name });
   document.body.append(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 10000);
-  markBackedUp();
   showToast('Backup saved to Downloads');
 }
-async function shareBackup() {
-  const file = await backupFile();
-  if (!navigator.canShare({ files: [file] })) return exportBackup();
-  try {
-    await navigator.share({ files: [file], title: file.name });
-    markBackedUp();
-    showToast('Backup sent');
-  } catch (e) {
-    if (e.name !== 'AbortError') exportBackup();
-  }
+
+function shareBackup() {
+  flush();
+  // Android only shares certain file types, and .json is not one of them, so the backup is shared as .txt.
+  const file = new File([backupData()], backupName('txt'), { type: 'text/plain' });
+  if (!navigator.canShare?.({ files: [file] })) return showToast('Sharing files is not supported here. Use Back up notes instead.');
+  navigator.share({ files: [file], title: file.name })
+    .then(() => showToast('Backup shared'))
+    .catch(e => { if (e.name !== 'AbortError') showToast('Sharing failed. Use Back up notes instead.'); });
 }
 
 function cleanNote(r) {
@@ -387,6 +372,7 @@ function cleanNote(r) {
     items: Array.isArray(r.items)
       ? r.items.filter(i => i && typeof i === 'object').map(i => ({ id: str(i.id) || uid(), text: str(i.text), done: !!i.done }))
       : [],
+    order: Number.isFinite(r.order) ? r.order : null,
     created: num(r.created), updated: num(r.updated)
   };
 }
@@ -408,8 +394,12 @@ $file.addEventListener('change', async () => {
     const n = cleanNote(raw);
     if (!n) continue;
     const existing = notes.get(n.id);
-    if (!existing || n.updated > existing.updated) { notes.set(n.id, n); pending.add(n.id); count++; }
+    if (!existing || n.updated > existing.updated) {
+      if (n.order == null) n.order = existing ? existing.order : topOrder();
+      notes.set(n.id, n); pending.add(n.id); count++;
+    }
   }
+  persistOrder(sortedNotes());
   await flush();
   showToast(count ? `Restored ${plural(count, 'note')}` : 'All notes in the backup are already here.');
   route();
@@ -538,7 +528,12 @@ function itemRow(box, n, i) {
       onclick: () => { n.items.splice(n.items.indexOf(i), 1); touch(n); drawList(box, n); }
     }));
   row.dataset.id = i.id;
-  attachDrag(handle, row, n);
+  attachDrag(handle, row, list => {
+    const byId = new Map(n.items.map(x => [x.id, x]));
+    const open = [...list.children].map(c => byId.get(c.dataset.id)).filter(Boolean);
+    n.items = [...open, ...n.items.filter(x => x.done)];
+    touch(n);
+  });
   return row;
 }
 
@@ -575,7 +570,7 @@ function clearChecked(box, n) {
   });
 }
 
-function attachDrag(handle, row, n) {
+function attachDrag(handle, row, onDrop) {
   handle.addEventListener('pointerdown', e => {
     if (e.button > 0) return;
     e.preventDefault();
@@ -623,10 +618,7 @@ function attachDrag(handle, row, n) {
       removeEventListener('pointercancel', end);
       row.classList.remove('dragging');
       row.style.transform = '';
-      const byId = new Map(n.items.map(i => [i.id, i]));
-      const open = [...list.children].map(c => byId.get(c.dataset.id)).filter(Boolean);
-      n.items = [...open, ...n.items.filter(i => i.done)];
-      touch(n);
+      onDrop(list);
     };
     addEventListener('pointermove', move, { passive: false });
     addEventListener('pointerup', end);
@@ -686,6 +678,8 @@ function hideToast() { document.getElementById('toast').classList.remove('show')
   try {
     db = await openDB();
     await loadAll();
+    if ([...notes.values()].some(n => !Number.isFinite(n.order)))
+      persistOrder([...notes.values()].sort((a, b) => (a.order ?? -Infinity) - (b.order ?? -Infinity) || b.updated - a.updated));
   } catch {
     $app.replaceChildren(el('p', { class: 'empty' }, 'Storage is unavailable. Open the app outside private browsing to save notes.'));
     return;
