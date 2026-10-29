@@ -1,0 +1,681 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<title>Notes</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<meta name="theme-color" content="#FBFBFA" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#141618" media="(prefers-color-scheme: dark)">
+<style>
+:root {
+  --bg: #FBFBFA; --surface: #FFFFFF; --ink: #1D2125; --muted: #878D93;
+  --line: #E8E9E7; --accent: #2E6B57; --accent-ink: #FFFFFF; --danger: #B8432F;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #141618; --surface: #1C1F21; --ink: #E8EAEB; --muted: #80878D;
+    --line: #2A2D30; --accent: #79BFA4; --accent-ink: #0F1A16; --danger: #E57A66;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { min-height: 100%; }
+body {
+  background: var(--bg); color: var(--ink);
+  font: 17px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+}
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+input, textarea { font: inherit; color: inherit; background: none; border: 0; outline: 0; width: 100%; min-width: 0; }
+::placeholder { color: var(--muted); opacity: 1; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 8px; }
+input:focus-visible, textarea:focus-visible { outline: 0; }
+
+.bar {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg);
+  display: flex; align-items: center; height: 56px; max-width: 640px; margin: 0 auto; padding: 0 8px;
+}
+.bar h1 { flex: 1; padding-left: 12px; font-size: 22px; font-weight: 650; letter-spacing: -0.01em; }
+.spacer { flex: 1; }
+.icon-btn { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; }
+.icon-btn:active { background: var(--line); }
+.icon-btn svg { width: 22px; height: 22px; }
+.wrap { max-width: 640px; margin: 0 auto; padding: 0 20px 140px; }
+
+/* Home */
+.notes { list-style: none; }
+.note-row { display: block; width: 100%; text-align: left; padding: 14px 0; border-bottom: 1px solid var(--line); }
+.note-row .t, .note-row .s { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.note-row .t { font-weight: 600; }
+.note-row .s { margin-top: 2px; font-size: 15px; color: var(--muted); }
+.empty { padding: 64px 0; text-align: center; color: var(--muted); }
+.banner {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 15px; color: var(--muted);
+}
+.banner button { color: var(--accent); font-weight: 600; padding: 6px 0; }
+.fab {
+  position: fixed; z-index: 6; width: 60px; height: 60px; border-radius: 20px;
+  right: calc(20px + env(safe-area-inset-right, 0px)); bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  background: var(--accent); color: var(--accent-ink); display: grid; place-items: center;
+  box-shadow: 0 6px 20px rgba(20, 40, 32, 0.22);
+}
+.fab svg { width: 26px; height: 26px; }
+
+/* Sheet */
+.scrim { position: fixed; inset: 0; z-index: 20; background: rgba(0, 0, 0, 0.32); display: flex; align-items: flex-end; justify-content: center; }
+.sheet {
+  width: 100%; max-width: 640px; background: var(--surface); border-radius: 20px 20px 0 0;
+  padding: 10px 8px calc(14px + env(safe-area-inset-bottom, 0px)); animation: up 0.18s ease-out;
+}
+.sheet button { display: block; width: 100%; text-align: left; padding: 14px 16px; border-radius: 12px; }
+.sheet button:active { background: var(--line); }
+.sheet .danger { color: var(--danger); }
+.sheet .info { padding: 4px 16px 8px; font-size: 14px; color: var(--muted); }
+.sheet hr { border: 0; border-top: 1px solid var(--line); margin: 6px 16px; }
+@keyframes up { from { transform: translateY(24px); opacity: 0; } }
+
+/* Editor */
+.title { font-size: 26px; font-weight: 650; letter-spacing: -0.015em; padding: 6px 0 14px; }
+.body { display: block; min-height: 60vh; resize: none; line-height: 1.55; overflow: hidden; }
+.item { display: flex; align-items: center; min-height: 48px; background: var(--bg); }
+.item input { flex: 1; padding: 11px 0; }
+.handle { flex: none; width: 28px; height: 44px; display: grid; place-items: center; color: var(--muted); opacity: 0.55; touch-action: none; cursor: grab; }
+.check { flex: none; width: 44px; height: 44px; display: grid; place-items: center; }
+.check span {
+  width: 22px; height: 22px; border-radius: 7px; border: 2px solid var(--muted);
+  display: grid; place-items: center; transition: background 0.15s, border-color 0.15s;
+}
+.item.done .check span { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.del { flex: none; width: 40px; height: 44px; display: grid; place-items: center; color: var(--muted); visibility: hidden; }
+.item:focus-within .del { visibility: visible; }
+.item.dragging { position: relative; z-index: 2; background: var(--surface); border-radius: 10px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.14); }
+.item.done { padding-left: 28px; }
+.txt { flex: 1; padding: 11px 0; color: var(--muted); word-break: break-word; }
+.tx {
+  background-image: linear-gradient(currentColor, currentColor); background-repeat: no-repeat;
+  background-position: 0 58%; background-size: 100% 1.5px;
+  -webkit-box-decoration-break: clone; box-decoration-break: clone;
+}
+.striking .tx { color: var(--muted); animation: strike 0.32s ease-out both; }
+@keyframes strike { from { background-size: 0% 1.5px; } }
+.add { display: flex; align-items: center; min-height: 48px; padding-left: 28px; }
+.add .plus { flex: none; width: 44px; display: grid; place-items: center; color: var(--muted); }
+.add .plus svg { width: 18px; height: 18px; }
+.add input { padding: 11px 0; }
+.done-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-top: 18px; padding-top: 6px; border-top: 1px solid var(--line); font-size: 15px; color: var(--muted);
+}
+.done-head button { padding: 10px 0; }
+.done-head .clear { color: var(--accent); font-weight: 600; }
+
+/* Toast */
+#toast {
+  position: fixed; z-index: 30; left: 50%; bottom: calc(100px + env(safe-area-inset-bottom, 0px));
+  max-width: calc(100% - 32px); display: flex; align-items: center; gap: 18px;
+  padding: 12px 16px; border-radius: 12px; background: var(--ink); color: var(--bg); font-size: 15px;
+  opacity: 0; pointer-events: none; transform: translate(-50%, 10px); transition: opacity 0.2s, transform 0.2s;
+}
+#toast.show { opacity: 1; pointer-events: auto; transform: translate(-50%, 0); }
+#toast button { color: var(--bg); font-weight: 700; padding: 2px 0; }
+
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="toast" role="status" aria-live="polite"></div>
+<input type="file" id="importFile" accept=".json,application/json" hidden>
+<script>
+'use strict';
+
+const $app = document.getElementById('app');
+const $file = document.getElementById('importFile');
+const DAY = 864e5;
+
+const ICON = {
+  back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>',
+  more: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>',
+  plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+  check: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+  grip: '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>',
+  x: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>'
+};
+
+/* ---------- helpers ---------- */
+function el(tag, attrs = {}, ...kids) {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (v == null || v === false) continue;
+    if (k === 'class') n.className = v;
+    else if (k === 'html') n.innerHTML = v;
+    else if (k.startsWith('on')) n.addEventListener(k.slice(2), v);
+    else if (k in n) n[k] = v;
+    else n.setAttribute(k, v === true ? '' : v);
+  }
+  for (const c of kids.flat()) {
+    if (c == null || c === false) continue;
+    n.append(c.nodeType ? c : document.createTextNode(String(c)));
+  }
+  return n;
+}
+const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
+const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+function ago(t) {
+  const d = Math.floor((Date.now() - t) / DAY);
+  return d <= 0 ? 'today' : d === 1 ? 'yesterday' : `${d} days ago`;
+}
+
+/* ---------- storage (IndexedDB) ---------- */
+let db;
+const notes = new Map();
+const meta = { lastBackup: 0 };
+const pending = new Set();
+let flushTimer;
+
+function openDB() {
+  return new Promise((res, rej) => {
+    const r = indexedDB.open('notes-db', 1);
+    r.onupgradeneeded = () => {
+      r.result.createObjectStore('notes', { keyPath: 'id' });
+      r.result.createObjectStore('meta');
+    };
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  });
+}
+const reqP = r => new Promise((res, rej) => { r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+
+async function loadAll() {
+  const t = db.transaction(['notes', 'meta']);
+  const [all, lb] = await Promise.all([
+    reqP(t.objectStore('notes').getAll()),
+    reqP(t.objectStore('meta').get('lastBackup'))
+  ]);
+  all.forEach(n => notes.set(n.id, n));
+  meta.lastBackup = lb || 0;
+}
+
+function touch(n) {
+  n.updated = Date.now();
+  notes.set(n.id, n);
+  pending.add(n.id);
+  clearTimeout(flushTimer);
+  flushTimer = setTimeout(flush, 250);
+}
+
+function flush() {
+  clearTimeout(flushTimer);
+  if (!pending.size) return Promise.resolve();
+  const ids = [...pending];
+  pending.clear();
+  return new Promise(res => {
+    const t = db.transaction('notes', 'readwrite');
+    const s = t.objectStore('notes');
+    ids.forEach(id => { const n = notes.get(id); n ? s.put(n) : s.delete(id); });
+    t.oncomplete = res;
+    t.onerror = t.onabort = () => {
+      ids.forEach(id => pending.add(id));
+      showToast('Saving failed. Free up phone storage, then edit again.');
+      res();
+    };
+  });
+}
+
+function removeNote(id) { notes.delete(id); pending.add(id); return flush(); }
+function setMeta(k, v) { db.transaction('meta', 'readwrite').objectStore('meta').put(v, k); }
+
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flush(); });
+addEventListener('pagehide', flush);
+
+function isEmpty(n) {
+  if (n.title.trim()) return false;
+  return n.type === 'list' ? n.items.every(i => !i.text.trim()) : !n.body.trim();
+}
+
+/* ---------- routing ---------- */
+let fromHome = false;
+let lastOpen = null;
+const currentId = () => { const h = location.hash.slice(1); return h.startsWith('n-') ? h.slice(2) : null; };
+
+function route() {
+  closeSheet();
+  const id = currentId();
+  if (lastOpen && lastOpen !== id) {
+    const prev = notes.get(lastOpen);
+    if (prev && isEmpty(prev)) removeNote(prev.id);
+  }
+  if (id && notes.has(id)) {
+    lastOpen = id;
+    renderEditor(notes.get(id));
+  } else {
+    lastOpen = null;
+    fromHome = false;
+    if (id) history.replaceState(null, '', location.pathname);
+    renderHome();
+  }
+}
+addEventListener('hashchange', route);
+
+function openNote(id) { fromHome = true; location.hash = 'n-' + id; }
+function goHome() {
+  if (fromHome) { fromHome = false; history.back(); }
+  else { history.replaceState(null, '', location.pathname); route(); }
+}
+
+/* ---------- home ---------- */
+function summary(n) {
+  if (n.type === 'list') {
+    const filled = n.items.filter(i => i.text.trim());
+    const open = filled.filter(i => !i.done);
+    if (!filled.length) return 'Empty list';
+    if (!open.length) return 'All checked';
+    return `${open.length} left: ` + open.map(i => i.text.trim()).join(', ');
+  }
+  return n.body.trim().split('\n')[0] || 'Empty note';
+}
+
+function backupReminder(sorted) {
+  if (!sorted.length) return null;
+  const lb = meta.lastBackup;
+  if (lb && (sorted[0].updated <= lb || Date.now() - lb < 7 * DAY)) return null;
+  if (!lb && Date.now() - Math.min(...sorted.map(n => n.created)) < DAY) return null;
+  return el('div', { class: 'banner' },
+    el('span', {}, lb ? `Last backup ${ago(lb)}.` : 'No backup yet.'),
+    el('button', { onclick: exportBackup }, 'Back up'));
+}
+
+function renderHome() {
+  document.title = 'Notes';
+  const sorted = [...notes.values()].filter(n => !isEmpty(n)).sort((a, b) => b.updated - a.updated);
+  const wrap = el('main', { class: 'wrap' }, backupReminder(sorted));
+  if (!sorted.length) wrap.append(el('p', { class: 'empty' }, 'No notes yet. Tap + to make a list.'));
+  else wrap.append(el('ul', { class: 'notes' }, sorted.map(n =>
+    el('li', {}, el('button', { class: 'note-row', onclick: () => openNote(n.id) },
+      el('span', { class: 't' }, n.title.trim() || 'Untitled'),
+      el('span', { class: 's' }, summary(n)))))));
+  $app.replaceChildren(
+    el('header', { class: 'bar' },
+      el('h1', {}, 'Notes'),
+      el('button', { class: 'icon-btn', 'aria-label': 'Menu', html: ICON.more, onclick: openHomeMenu })),
+    wrap,
+    el('button', { class: 'fab', 'aria-label': 'New', html: ICON.plus, onclick: openNewMenu }));
+}
+
+function createNote(type) {
+  closeSheet();
+  const now = Date.now();
+  const n = { id: uid(), type, title: '', items: [], body: '', created: now, updated: now };
+  notes.set(n.id, n); // saved once something is typed
+  openNote(n.id);
+}
+
+function openNewMenu() {
+  openSheet([
+    el('button', { onclick: () => createNote('list') }, 'Checklist'),
+    el('button', { onclick: () => createNote('text') }, 'Note')
+  ]);
+}
+
+async function openHomeMenu() {
+  let persisted = false;
+  try { persisted = await navigator.storage?.persisted?.(); } catch {}
+  const items = [
+    el('button', { onclick: () => { closeSheet(); exportBackup(); } }, 'Back up notes'),
+  ];
+  if (navigator.canShare) items.push(el('button', { onclick: () => { closeSheet(); shareBackup(); } }, 'Send backup to Drive or another app'));
+  items.push(
+    el('button', { onclick: () => { closeSheet(); $file.click(); } }, 'Restore from backup'),
+    el('hr'),
+    el('p', { class: 'info' }, meta.lastBackup ? `Last backup: ${new Date(meta.lastBackup).toLocaleDateString()}` : 'No backup yet'),
+    el('p', { class: 'info' }, persisted
+      ? `${plural(notes.size, 'note')} stored on this phone. Storage is protected from automatic cleanup.`
+      : `${plural(notes.size, 'note')} stored on this phone. Install the app to protect storage from automatic cleanup.`)
+  );
+  openSheet(items);
+}
+
+/* ---------- backup ---------- */
+async function backupFile() {
+  await flush();
+  const data = {
+    app: 'notes', version: 1, exported: new Date().toISOString(),
+    notes: [...notes.values()].filter(n => !isEmpty(n))
+  };
+  const name = `notes-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  return new File([JSON.stringify(data, null, 1)], name, { type: 'application/json' });
+}
+function markBackedUp() {
+  meta.lastBackup = Date.now();
+  setMeta('lastBackup', meta.lastBackup);
+  if (!currentId()) renderHome();
+}
+async function exportBackup() {
+  const file = await backupFile();
+  const url = URL.createObjectURL(file);
+  const a = el('a', { href: url, download: file.name });
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+  markBackedUp();
+  showToast('Backup saved to Downloads');
+}
+async function shareBackup() {
+  const file = await backupFile();
+  if (!navigator.canShare({ files: [file] })) return exportBackup();
+  try {
+    await navigator.share({ files: [file], title: file.name });
+    markBackedUp();
+    showToast('Backup sent');
+  } catch (e) {
+    if (e.name !== 'AbortError') exportBackup();
+  }
+}
+
+function cleanNote(r) {
+  if (!r || typeof r !== 'object') return null;
+  const str = v => (typeof v === 'string' ? v : '');
+  const num = v => (Number.isFinite(v) ? v : Date.now());
+  return {
+    id: str(r.id) || uid(),
+    type: r.type === 'text' ? 'text' : 'list',
+    title: str(r.title), body: str(r.body),
+    items: Array.isArray(r.items)
+      ? r.items.filter(i => i && typeof i === 'object').map(i => ({ id: str(i.id) || uid(), text: str(i.text), done: !!i.done }))
+      : [],
+    created: num(r.created), updated: num(r.updated)
+  };
+}
+
+$file.addEventListener('change', async () => {
+  const f = $file.files[0];
+  $file.value = '';
+  if (!f) return;
+  let list;
+  try {
+    const data = JSON.parse(await f.text());
+    list = Array.isArray(data) ? data : data.notes;
+    if (!Array.isArray(list)) throw new Error();
+  } catch {
+    return showToast('That file is not a notes backup.');
+  }
+  let count = 0;
+  for (const raw of list) {
+    const n = cleanNote(raw);
+    if (!n) continue;
+    const existing = notes.get(n.id);
+    if (!existing || n.updated > existing.updated) { notes.set(n.id, n); pending.add(n.id); count++; }
+  }
+  await flush();
+  showToast(count ? `Restored ${plural(count, 'note')}` : 'All notes in the backup are already here.');
+  route();
+});
+
+/* ---------- editor ---------- */
+let showDone = true;
+
+function renderEditor(n) {
+  document.title = n.title || 'Notes';
+  const wrap = el('main', { class: 'wrap' });
+  const title = el('input', {
+    class: 'title', value: n.title, enterKeyHint: 'next', 'aria-label': 'Title',
+    placeholder: n.type === 'list' ? 'List name' : 'Title',
+    oninput: () => { n.title = title.value; touch(n); },
+    onkeydown: e => {
+      if (e.key === 'Enter') { e.preventDefault(); wrap.querySelector('.add input, textarea')?.focus(); }
+    }
+  });
+  wrap.append(title);
+
+  if (n.type === 'list') {
+    const box = el('div', { class: 'list' });
+    wrap.append(box);
+    drawList(box, n);
+  } else {
+    const ta = el('textarea', {
+      class: 'body', value: n.body, placeholder: 'Write something', 'aria-label': 'Note',
+      oninput: () => { n.body = ta.value; touch(n); grow(ta); }
+    });
+    wrap.append(ta);
+    requestAnimationFrame(() => grow(ta));
+  }
+
+  $app.replaceChildren(
+    el('header', { class: 'bar' },
+      el('button', { class: 'icon-btn', 'aria-label': 'Back', html: ICON.back, onclick: goHome }),
+      el('div', { class: 'spacer' }),
+      el('button', { class: 'icon-btn', 'aria-label': 'Options', html: ICON.more, onclick: () => openNoteMenu(n) })),
+    wrap);
+  window.scrollTo(0, 0);
+  if (isEmpty(n)) title.focus();
+}
+
+function grow(ta) { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; }
+
+function drawList(box, n, focus) {
+  const open = n.items.filter(i => !i.done);
+  const done = n.items.filter(i => i.done);
+  const openBox = el('div', { class: 'open' }, open.map(i => itemRow(box, n, i)));
+
+  const addIn = el('input', { placeholder: 'Add item', enterKeyHint: 'enter', 'aria-label': 'Add item' });
+  const commitAdd = () => {
+    const lines = addIn.value.split('\n').map(s => s.trim()).filter(Boolean);
+    addIn.value = '';
+    for (const text of lines) {
+      const i = { id: uid(), text, done: false };
+      n.items.push(i);
+      openBox.append(itemRow(box, n, i));
+    }
+    if (lines.length) touch(n);
+  };
+  addIn.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); commitAdd(); addIn.scrollIntoView({ block: 'nearest' }); } });
+  addIn.addEventListener('blur', commitAdd);
+  addIn.addEventListener('paste', e => {
+    const text = e.clipboardData?.getData('text') || '';
+    if (text.includes('\n')) { e.preventDefault(); addIn.value += text; commitAdd(); }
+  });
+
+  box.replaceChildren(openBox, el('div', { class: 'add' }, el('span', { class: 'plus', html: ICON.plus }), addIn));
+
+  if (done.length) {
+    box.append(el('div', { class: 'done-head' },
+      el('button', { 'aria-expanded': String(showDone), onclick: () => { showDone = !showDone; drawList(box, n); } },
+        `${showDone ? '▾' : '▸'} ${done.length} checked`),
+      el('button', { class: 'clear', onclick: () => clearChecked(box, n) }, 'Clear')));
+    if (showDone) box.append(el('div', {}, done.map(i => doneRow(box, n, i))));
+  }
+
+  if (focus) {
+    const inp = focus.add ? addIn : box.querySelector(`.item[data-id="${CSS.escape(focus.id)}"] input`);
+    if (inp) {
+      inp.focus();
+      if (focus.caret != null) inp.setSelectionRange(focus.caret, focus.caret);
+      inp.scrollIntoView({ block: 'nearest' });
+    }
+  }
+}
+
+function itemRow(box, n, i) {
+  const input = el('input', {
+    value: i.text, enterKeyHint: 'next', 'aria-label': 'Item',
+    oninput: () => { i.text = input.value; touch(n); },
+    onkeydown: e => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const pos = input.selectionStart ?? input.value.length;
+        const rest = input.value.slice(pos);
+        i.text = input.value.slice(0, pos);
+        const ni = { id: uid(), text: rest, done: false };
+        n.items.splice(n.items.indexOf(i) + 1, 0, ni);
+        touch(n);
+        drawList(box, n, { id: ni.id, caret: 0 });
+      } else if (e.key === 'Backspace' && input.selectionStart === 0 && input.selectionEnd === 0) {
+        const open = n.items.filter(x => !x.done);
+        const idx = open.indexOf(i);
+        if (idx > 0) {
+          e.preventDefault();
+          const prev = open[idx - 1];
+          const caret = prev.text.length;
+          prev.text += i.text;
+          n.items.splice(n.items.indexOf(i), 1);
+          touch(n);
+          drawList(box, n, { id: prev.id, caret });
+        }
+      }
+    }
+  });
+  const handle = el('span', { class: 'handle', 'aria-hidden': 'true', html: ICON.grip });
+  const row = el('div', { class: 'item' },
+    handle,
+    el('button', { class: 'check', 'aria-label': 'Check', html: '<span></span>', onclick: () => check(box, n, i, row) }),
+    input,
+    el('button', {
+      class: 'del', 'aria-label': 'Delete item', html: ICON.x,
+      onclick: () => { n.items.splice(n.items.indexOf(i), 1); touch(n); drawList(box, n); }
+    }));
+  row.dataset.id = i.id;
+  attachDrag(handle, row, n);
+  return row;
+}
+
+function doneRow(box, n, i) {
+  const uncheck = () => { i.done = false; touch(n); drawList(box, n); };
+  return el('div', { class: 'item done' },
+    el('button', { class: 'check', 'aria-label': 'Uncheck', html: '<span>' + ICON.check + '</span>', onclick: uncheck }),
+    el('span', { class: 'txt', onclick: uncheck }, el('span', { class: 'tx' }, i.text || ' ')));
+}
+
+function check(box, n, i, row) {
+  if (row.classList.contains('striking')) return;
+  i.done = true;
+  touch(n);
+  navigator.vibrate?.(8);
+  row.querySelector('input').replaceWith(el('span', { class: 'txt' }, el('span', { class: 'tx' }, i.text || ' ')));
+  row.querySelector('.check span').innerHTML = ICON.check;
+  row.classList.add('done', 'striking');
+  row.style.paddingLeft = '0';
+  setTimeout(() => { if (box.isConnected) drawList(box, n); }, 420);
+}
+
+function clearChecked(box, n) {
+  const before = n.items.slice();
+  n.items = n.items.filter(i => !i.done);
+  const removed = before.length - n.items.length;
+  if (!removed) return;
+  touch(n);
+  if (box?.isConnected) drawList(box, n);
+  showToast(`Cleared ${plural(removed, 'item')}`, 'Undo', () => {
+    n.items = before; touch(n);
+    const b = document.querySelector('.list');
+    if (b && currentId() === n.id) drawList(b, n);
+  });
+}
+
+function attachDrag(handle, row, n) {
+  handle.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    const list = row.parentElement;
+    if (!list) return;
+    document.activeElement?.blur();
+    handle.setPointerCapture(e.pointerId);
+    row.classList.add('dragging');
+    navigator.vibrate?.(10);
+    let ended = false;
+    const move = ev => {
+      const y = ev.clientY;
+      let before = null;
+      for (const s of list.children) {
+        if (s === row) continue;
+        const r = s.getBoundingClientRect();
+        if (y < r.top + r.height / 2) { before = s; break; }
+      }
+      if (row.nextElementSibling !== before) list.insertBefore(row, before);
+      if (y < 90) scrollBy(0, -10);
+      else if (y > innerHeight - 90) scrollBy(0, 10);
+    };
+    const end = () => {
+      if (ended) return;
+      ended = true;
+      handle.removeEventListener('pointermove', move);
+      handle.removeEventListener('pointerup', end);
+      handle.removeEventListener('pointercancel', end);
+      row.classList.remove('dragging');
+      const byId = new Map(n.items.map(i => [i.id, i]));
+      const open = [...list.children].map(c => byId.get(c.dataset.id)).filter(Boolean);
+      n.items = [...open, ...n.items.filter(i => i.done)];
+      touch(n);
+    };
+    handle.addEventListener('pointermove', move);
+    handle.addEventListener('pointerup', end);
+    handle.addEventListener('pointercancel', end);
+  });
+}
+
+function openNoteMenu(n) {
+  const items = [];
+  if (n.type === 'list') {
+    items.push(
+      el('button', { onclick: () => {
+        closeSheet();
+        n.items.forEach(i => (i.done = false)); touch(n);
+        drawList(document.querySelector('.list'), n);
+      } }, 'Uncheck all'),
+      el('button', { onclick: () => { closeSheet(); clearChecked(document.querySelector('.list'), n); } }, 'Clear checked items'));
+  }
+  items.push(el('button', { class: 'danger', onclick: () => { closeSheet(); deleteNote(n); } },
+    n.type === 'list' ? 'Delete list' : 'Delete note'));
+  openSheet(items);
+}
+
+function deleteNote(n) {
+  lastOpen = null;
+  removeNote(n.id);
+  goHome();
+  showToast(n.type === 'list' ? 'List deleted' : 'Note deleted', 'Undo', () => {
+    notes.set(n.id, n); pending.add(n.id); flush();
+    if (!currentId()) renderHome();
+  });
+}
+
+/* ---------- sheet & toast ---------- */
+function openSheet(children) {
+  closeSheet();
+  const scrim = el('div', { class: 'scrim', onclick: e => { if (e.target === scrim) closeSheet(); } },
+    el('div', { class: 'sheet', role: 'dialog' }, children));
+  document.body.append(scrim);
+}
+function closeSheet() { document.querySelector('.scrim')?.remove(); }
+
+let toastTimer;
+function showToast(msg, action, fn) {
+  const t = document.getElementById('toast');
+  t.replaceChildren(el('span', {}, msg));
+  if (action) t.append(el('button', { onclick: () => { fn(); hideToast(); } }, action));
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(hideToast, action ? 6000 : 3000);
+}
+function hideToast() { document.getElementById('toast').classList.remove('show'); }
+
+/* ---------- start ---------- */
+(async () => {
+  try {
+    db = await openDB();
+    await loadAll();
+  } catch {
+    $app.replaceChildren(el('p', { class: 'empty' }, 'Storage is unavailable. Open the app outside private browsing to save notes.'));
+    return;
+  }
+  route();
+  try {
+    if (navigator.storage?.persist && !(await navigator.storage.persisted())) await navigator.storage.persist();
+  } catch {}
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+})();
+</script>
+</body>
+</html>
